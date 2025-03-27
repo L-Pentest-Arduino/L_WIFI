@@ -4,24 +4,30 @@ import threading
 import time
 import os
 import signal
+import random
 
-print("""
-\033[34m
-  _   _  ____   ____        __  __       _      
- | \ | |/ ___| |  _ \      |  \/  | __ _| |_ __
- |  \| | |     | |_) |_____| |\/| |/ _` | | '_ \
- | |\  | |___  |  _ < |_____| |  | | (_| | | | | |
- |_| \_|\____| |_| \_\      |_|  |_|\__,_|_|_| |_|
+# Конфигурация
+INTERFACE = input("Введите имя беспроводного интерфейса (например, wlan0): ")
+NUM_APS = int(input("Введите количество точек доступа для создания: "))
+ESSID_BASE = input("Введите базовое имя ESSID для точек доступа: ")
 
-              _       
-             (_)      
-              _ _ __  
-             | | '_ \\ 
-             | | | | |
-             |_|_| |_|
-
-      \033[32m 📶  📶  📶   L_WIFI   📶  📶  📶 \033[0m \n""")
-
+# Функция для выбора канала, избегая перекрытия
+def choose_channel(used_channels):
+    """Выбирает канал, избегая перекрытия с уже используемыми."""
+    available_channels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    # Удаляем перекрывающиеся каналы: если занят 6, удаляем 4, 5, 7, 8
+    for channel in used_channels:
+        if channel in available_channels:
+            available_channels.remove(channel) # Убираем сам канал
+            if channel - 1 in available_channels:
+                available_channels.remove(channel - 1)
+            if channel + 1 in available_channels:
+                available_channels.remove(channel + 1)
+    if available_channels:
+        return random.choice(available_channels)
+    else:
+        print("[-] Все каналы заняты или перекрываются.  Будем использовать случайный канал.")
+        return random.choice([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) # Если все занято - случайный канал
 
 def start_fake_ap(interface, essid, channel, ap_number):
     """Запускает airbase-ng для создания поддельной точки доступа."""
@@ -32,48 +38,37 @@ def start_fake_ap(interface, essid, channel, ap_number):
         print(f"[-] Ошибка при запуске airbase-ng для {ap_number}: {e}")
 
 def stop_airbase_ng(interface):
-    """Останавливает все процессы airbase-ng, работающие на указанном интерфейсе."""
+    """Останавливает все процессы airbase-ng."""
     try:
-        # Получаем список PID процессов airbase-ng
         result = subprocess.run(["pgrep", "-f", f"airbase-ng {interface}"], capture_output=True, text=True, check=True)
         pids = result.stdout.strip().split("\n")
 
-        # Убиваем каждый процесс
         for pid in pids:
             try:
-                os.kill(int(pid), signal.SIGTERM)  # SIGTERM - сигнал для корректного завершения
+                os.kill(int(pid), signal.SIGTERM)
                 print(f"[+] Процесс airbase-ng с PID {pid} остановлен.")
             except OSError as e:
                 print(f"[-] Не удалось остановить процесс airbase-ng с PID {pid}: {e}")
 
     except subprocess.CalledProcessError as e:
-        # Если pgrep не нашел процессов, это не ошибка
         if e.returncode == 1:
             print("[-] Процессы airbase-ng не найдены.")
         else:
             print(f"[-] Ошибка при поиске процессов airbase-ng: {e}")
 
-if __name__ == "__main__":
-    # Запрашиваем параметры у пользователя
-    interface = input("Введите имя беспроводного интерфейса (например, wlan0): ")
-    while True:
-        try:
-            num_aps = int(input("Введите количество точек доступа для создания: "))
-            if num_aps > 0:
-                break
-            else:
-                print("Пожалуйста, введите положительное число.")
-        except ValueError:
-            print("Пожалуйста, введите число.")
 
-    essid_base = input("Введите базовое имя ESSID для точек доступа: ")
+if __name__ == "__main__":
+    # Список уже используемых каналов
+    used_channels = []
 
     # Запускаем airbase-ng для каждой точки доступа в отдельном потоке
     threads = []
-    for i in range(1, num_aps + 1):
-        essid = f"{essid_base}-{i}"
-        channel = i  # Можно сделать выбор канала более гибким, если нужно
-        thread = threading.Thread(target=start_fake_ap, args=(interface, essid, channel, i))
+    for i in range(1, NUM_APS + 1):
+        essid = f"{ESSID_BASE}-{i}"
+        channel = choose_channel(used_channels)  # Выбираем канал
+        used_channels.append(channel)  # Добавляем канал в список использованных
+
+        thread = threading.Thread(target=start_fake_ap, args=(INTERFACE, essid, channel, i))
         threads.append(thread)
         thread.start()
 
@@ -83,5 +78,5 @@ if __name__ == "__main__":
             thread.join()
     except KeyboardInterrupt:
         print("\n[+] Остановка поддельных точек доступа...")
-        stop_airbase_ng(interface)  # Останавливаем airbase-ng процессы
+        stop_airbase_ng(INTERFACE)
         print("[+] Завершение...")
