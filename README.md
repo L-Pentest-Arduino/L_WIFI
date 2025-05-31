@@ -7,13 +7,11 @@ WIFI Адаптер с режимом мониторинга
 
 Скачивание:
 
-git clone https://github.com/L-Pentest-Arduino/L_WIFI.git
-cd L_WIFI
+git clone https://github.com/L-Pentest-Arduino/L_WIFI.git | cd L_WIFI
 
 Настройка адаптера и т.д:
 
-sudo airmon-ng check kill
-sudo airmon-ng start <Имя беспроводного интерфеса пример: wlan0>
+sudo airmon-ng check kill | sudo airmon-ng start <Имя беспроводного интерфеса пример: wlan0>
 
 Запуск:
 
